@@ -318,7 +318,6 @@ def generateCSR_wtih_SAN(nodename, sans, cert_st, cert_loc, cert_org, cert_org_u
     extentions = []
 
     if sans:
-
         sans = sans.split(",")
 
         altname = b'subjectAltName'
