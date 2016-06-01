@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 
-"""\n  pfxbuilder
+'''\n  pfx generator
   Builds  directories containing  a cert, key and ".pfx" for each fqdn processed
 
   The list should be fqdn/url or box name.
@@ -18,9 +18,23 @@
   Flags:
     -h      help
 
-    Version: 002
 
-"""
+  ############################################################
+    If there is an output of  "key/cert do not match for <some fqdn>"
+
+    use:
+      openssl x509 -noout -modulus -in certificate.crt | openssl md5
+      openssl rsa -noout -modulus -in privateKey.key | openssl md5
+      openssl req -noout -modulus -in CSR.csr | openssl md5
+
+    All 3 files should have the same md5 hash
+
+  ############################################################
+
+
+    Version: 003
+
+'''
 
 # Libraries/Modules
 from OpenSSL import crypto, SSL
@@ -94,23 +108,40 @@ def pfx_generator(d_path, pass_phrase, node_name):
 
     try:
         cert = crypto.load_certificate(crypto.FILETYPE_PEM, st_cert)
-    except:
-        print(" No " + ctrfile + " for processing")
+    except crypto.Error:
+        print(" No " + node_name + ".cer for processing")
 
     try:
         privkey = crypto.load_privatekey(crypto.FILETYPE_PEM, st_key)
+    except crypto.Error:
+        print(" No " + node_name + ".key for processing")
+
+    # Check if key/cert are a matched pair if
+    # not kick out of functon with return of 1
+
+    context = SSL.Context(SSL.TLSv1_METHOD)
+    context.use_privatekey(privkey)
+    context.use_certificate(cert)
+
+    try:
+        context.check_privatekey()
     except:
-        print(" No " + st_key + " for processing")
+        print("-- key/cert do not match for " + node_name)
+        return 1
 
     pfx = crypto.PKCS12()
     pfx.set_certificate(cert)
     pfx.set_privatekey(privkey)
-    pfxdata = pfx.export(pass_phrase)
 
-    with open(os.path.join(d_path, pfx_file), 'wb') as pfxfile:
-        pfxfile.write(pfxdata)
+    try:
+        pfxdata = pfx.export(pass_phrase)
 
-    return node_name
+        with open(os.path.join(d_path, pfx_file), 'wb') as pfxfile:
+            pfxfile.write(pfxdata)
+    except:
+        print("--- " + node_name + " not processed ---")
+
+    return 0
 
 
 def list_builder(data_flag, file_name):
@@ -141,10 +172,10 @@ def list_builder(data_flag, file_name):
 
 
 def dir_scanning(dir_to_scan):
-    """
+    '''
     : scan selected directory
     : return list of filenames
-    """
+    '''
 
     file_list = []
 
@@ -158,9 +189,9 @@ def dir_scanning(dir_to_scan):
 
 
 def node_build(f_list, file_extention):
-    """
+    '''
     : builds list of nodes from file list
-    """
+    '''
 
     node_list = []
 
@@ -177,9 +208,9 @@ def node_build(f_list, file_extention):
 
 
 def dir_path_build(destination_dir, f_list):
-    """
+    '''
     : builds destination path to node
-    """
+    '''
     dir_path = []
 
     for file in f_list:
@@ -189,16 +220,14 @@ def dir_path_build(destination_dir, f_list):
 
 
 def dir_creation(node_list, file_extention, destination_dir):
-    """
+    '''
     : if directory is not in place for file name
     :    a new one is created
     : if a directory exists it is shifted, checked
     :    for files and then deleted
     : returning a list of dir names created so we dont have to do this
     : again as we move files about?
-    """
-
-    # host_list = []
+    '''
 
     # for file in f_list:
     for node in node_list:
@@ -208,28 +237,14 @@ def dir_creation(node_list, file_extention, destination_dir):
         # checking to see if dir exists
         if not os.path.exists(dir_path):
             os.makedirs(dir_path)
-            # else:
-            #    tmp = tempfile.mktemp(dir=os.path.dirname(dir_path))
-            #    #print(" temp dir " + tmp)
-            #    shutil.move(dir_path, tmp)
-
-            #    # checking inside of dir for files
-            #    # if files found remove them
-            #    for file_object in os.scandir(tmp):
-            #        os.remove(os.path.join(tmp,file_object.name))
-
-            #    # move existing files from tmp to new dir?
-
-            #    os.makedirs(dir_path)
-            #    os.rmdir(tmp)
 
 
 def move_files(d_primary, node_list, ext_list, destination_dir):
-    """
+    '''
     : d_primary = directory pulling from
     : f_list = to build directory push path
     : file_extention = used build list ?
-    """
+    '''
     for file in node_list:
         # print(file)
         # print(d_primary)
@@ -249,23 +264,23 @@ def move_files(d_primary, node_list, ext_list, destination_dir):
 
 
 def reg_search(r_key):
-    """
+    '''
     : builds complied search requriment
     : r_key = search criteria
     : re.M = mult-line
     : re.I = ignore case
     : before -> re.search(r'.cer', file, re.M|re.I)
     : after  -> re.search(file_extention, file)
-    """
+    '''
 
     return re.compile(r_key, re.M | re.I)
 
 
 def process_complete(node_list):
-    """
+    '''
     : general output for user to know when process is complete
     : and a list of nodes processed.
-    """
+    '''
 
     print("\n  Processing is complete\n    \" .pfx's \"  will be in subdirectory named after nodes ")
     print("\n  Completed Nodes are:")
@@ -276,13 +291,13 @@ def process_complete(node_list):
 
 
 def main():
-    """
+    '''
     : some built in  assumptions
     : there is a keys directory
     : there is a cer and there is an associated key for the cer
     : and both cer/key are in the keys directory
 
-    """
+    '''
 
     # Pass Phrase must exist for pfx builder to work
     pass_phrase = pars_cmd(sys.argv)
@@ -293,8 +308,9 @@ def main():
 
     # list of extenions for file move
     ext_list = ['.key', '.pfx', '.cer']
-    # extention to search for
+    # extension to search for
     s_exten = reg_search('.cer')
+    p_exten = reg_search('.pfx')
 
     # check to see if dir is in place this will not work
     # future source directory?
@@ -309,14 +325,12 @@ def main():
 
     # check to see if destination directory exists?
     # future destination directory?
+
     destination_directory = 'blah'
 
-    # processing file moving
+    # primary - processing file moving
     f_list = dir_scanning(primary_directory)
-
     nodes = node_build(f_list, s_exten)
-
-    # dir_path = dir_path_build(destination_directory, nodes )
 
     # directory_names = dir_creation(f_list, s_exten)
     dir_creation(nodes, s_exten, destination_dir)
@@ -329,14 +343,20 @@ def main():
 
     for d_nodename in nodes:
         d_nodename = d_nodename.rstrip()
+        pfx_status = 0
+
         if len(d_nodename) > 0:
             # set consistency of nodename to lower case
             d_nodename = d_nodename.lower()
-            pfx_generator(primary_directory, pass_phrase, d_nodename)
-            nodes_completed.append(d_nodename)
+
+            pfx_status = pfx_generator(primary_directory, pass_phrase, d_nodename)
+            if pfx_status == 0:
+                nodes_completed.append(d_nodename)
 
     # after all pfx's are built, move key/cer/pfx to node named folder
-    move_files(primary_directory, nodes, ext_list, destination_dir)
+    p_list = dir_scanning(primary_directory)
+    p_nodes = node_build(p_list, p_exten)
+    move_files(primary_directory, p_nodes, ext_list, destination_dir)
 
     # once everything is done ...
     process_complete(nodes_completed)
